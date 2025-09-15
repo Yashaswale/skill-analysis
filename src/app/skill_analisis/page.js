@@ -461,7 +461,7 @@ export default function SkillAnalysisPage() {
           <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2 transition-colors text-sm">
             <FiPlus /> New Analysis
           </button>
-          <button
+          {/* <button
             className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg px-3 py-2 text-sm"
             onClick={() => {
               setHistoryOpen(true);
@@ -469,7 +469,7 @@ export default function SkillAnalysisPage() {
             }}
           >
             <FiClock /> History
-          </button>
+          </button> */}
           <button
             className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg px-3 py-2 text-sm"
             onClick={openChatHistory}
@@ -886,13 +886,13 @@ export default function SkillAnalysisPage() {
                 <div className="relative">
                   <FiFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <select
-                    className="pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[200px]"
+                    className="pl-10 pr-3 py-2 text-black border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[200px]"
                     value={skillFilter}
                     onChange={(e) => setSkillFilter(e.target.value)}
                   >
-                    <option value="">Filter by Skill (any)</option>
+                    <option className="text-black" value="">Filter by Skill (any)</option>
                     {Array.from(new Set((analysisResults.candidates || []).flatMap((c) => c?.skills_analysis?.matched_skills || []))).map((skill) => (
-                      <option key={skill} value={skill}>{skill}</option>
+                      <option className="text-black" key={skill} value={skill}>{skill}</option>
                     ))}
                   </select>
                 </div>

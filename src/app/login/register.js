@@ -54,6 +54,7 @@ export default function Register({ onLoginClick }) {
             width={350}
             height={350}
             priority
+            unoptimized
             className="drop-shadow-xl"
           />
         </div>

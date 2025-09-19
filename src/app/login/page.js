@@ -91,6 +91,7 @@ export default function LoginPage() {
             width={350}
             height={350}
             priority
+            unoptimized
             className="drop-shadow-xl"
           />
         </div>

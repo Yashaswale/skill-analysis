@@ -46,4 +46,14 @@ export const analysis_history = API_BASE_URL + "/v1/analysis/history";
 
 export const get_analysis_by_id = API_BASE_URL + "/v1/analysis/{id}";
 
+//Document analysis
+
+export const document_analysis = API_BASE_URL + "/v1/documents/analyze";
+export const upload_document = API_BASE_URL + "/v1/documents/upload";
+export const search_document = API_BASE_URL + "/v1/documents/search";
+export const list_documents = API_BASE_URL + "/v1/documents";
+export const documents_history = API_BASE_URL + "/v1/documents/{document_id}";
+
+
+
 

@@ -7,17 +7,27 @@ import {
   upload_document, 
   search_document, 
   list_documents,
-  documents_history 
+  documents_history,
+  multidocument_analysis
 } from "../config.js";
 
 // Remove static documents array - will be fetched from API
 
-const quickActions = [
-  "Summarize key point",
-  "Extract all data?",
-  "List action items",
-  "What is the main topic?",
-];
+const DEFAULT_QUICK_ACTIONS = {
+  qa: [
+    "What are the key points?",
+    "Who are the stakeholders?",
+    "What is the due date?",
+    "List risks and mitigations",
+  ],
+  summary: [
+    "Summarize key points",
+    "Provide a concise overview",
+    "Summarize by sections",
+    "Give a 5-bullet summary",
+  ],
+ 
+};
 
 export default function DocumentChat() {
   const router = useRouter();
@@ -34,6 +44,7 @@ export default function DocumentChat() {
   const [selectedDocumentForAnalysis, setSelectedDocumentForAnalysis] = useState(null);
   const fileInputRef = useRef(null);
   const [toasts, setToasts] = useState([]);
+  const [analysisType, setAnalysisType] = useState("qa");
 
   // Lightweight toast notifications
   const notify = (variant, title, message) => {
@@ -132,7 +143,7 @@ export default function DocumentChat() {
     try {
       setUploading(true);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('files', file);
 
       const response = await authFetch(upload_document, {
         method: 'POST',
@@ -189,17 +200,21 @@ export default function DocumentChat() {
         },
         body: JSON.stringify({
           document_id: document_id,
-          analysis_type: "summary",
+          analysis_type: analysisType,
           questions: questions
         })
       });
 
       if (response.ok) {
         const data = await response.json();
+        const docObj = documents.find((d) => getDocId(d) === document_id);
+        const docName = getDocName(docObj);
+        const header = `# ${analysisType.toUpperCase()} - Single Document\n\n**Document:** ${docName}`;
+        const body = data.summary || data.analysis || data.result || data.answer || 'Analysis completed';
         setChatMessages(prev => [
           ...prev,
           { type: 'user', content: questions.join(', ') },
-          { type: 'assistant', content: data.summary || data.analysis || data.result || 'Analysis completed' }
+          { type: 'assistant', content: `${header}\n\n---\n\n${body}` }
         ]);
       } else {
         console.error('Failed to analyze document');
@@ -213,21 +228,82 @@ export default function DocumentChat() {
     }
   };
 
+  const handleMultiDocumentAnalysis = async (document_ids, question) => {
+    try {
+      setLoading(true);
+      const response = await authFetch(multidocument_analysis, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: question,
+          document_ids: document_ids,
+          analysis_type: analysisType,
+          questions: [question]
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Try to extract the best answer from the known response shape
+        let extractedAnswer = null;
+        if (data?.results?.answers) {
+          if (typeof data.results.answers === 'object') {
+            extractedAnswer = data.results.answers[question] ?? Object.values(data.results.answers)[0];
+          } else if (typeof data.results.answers === 'string') {
+            extractedAnswer = data.results.answers;
+          }
+        }
+
+        const fallbackText = data.summary || data.analysis || data.result || data.answer || extractedAnswer || JSON.stringify(data, null, 2);
+
+        // Map selected doc IDs to human-readable names if available
+        const docNames = document_ids.map((id) => {
+          const docObj = documents.find((d) => getDocId(d) === id);
+          return `- ${getDocName(docObj)}`;
+        }).join('\n');
+
+        // Build a structured message with clear sections
+        const header = `# ${analysisType.toUpperCase()} - Multi-Document Analysis`;
+        const queryBlock = `**Query:** ${question}`;
+        const docsBlock = `**Documents analyzed:**\n${docNames}`;
+        const summaryText = (typeof data?.results?.summary === 'string' && data.results.summary) || (typeof data?.summary === 'string' && data.summary) || '';
+        const summaryBlock = summaryText ? `\n\n## Summary\n\n${summaryText}` : '';
+        const detailsBlock = !summaryText && fallbackText ? `\n\n## Details\n\n${fallbackText}` : '';
+        const assistantContent = `${header}\n\n${queryBlock}\n\n${docsBlock}${summaryBlock}${detailsBlock}`;
+
+        setChatMessages(prev => [
+          ...prev,
+          { type: 'user', content: question },
+          { type: 'assistant', content: assistantContent }
+        ]);
+      } else {
+        console.error('Failed to analyze multiple documents');
+        notify('error', 'Analysis failed', 'Failed to analyze multiple documents');
+      }
+    } catch (error) {
+      console.error('Error analyzing multiple documents:', error);
+      notify('error', 'Analysis error', 'Error analyzing multiple documents');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredDocs = documents.filter((doc) =>
     getDocName(doc).toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDocSelect = (doc) => {
     const docId = getDocId(doc);
-    
-    // Single document selection - toggle if already selected
-    if (selectedDocumentForAnalysis === docId) {
-      setSelectedDocumentForAnalysis(null);
-      setSelectedDocs([]);
-    } else {
-      setSelectedDocumentForAnalysis(docId);
-      setSelectedDocs([docId]);
-    }
+    if (!docId) return;
+
+    setSelectedDocs((prev) => {
+      const isSelected = prev.includes(docId);
+      const updated = isSelected ? prev.filter((id) => id !== docId) : [...prev, docId];
+      setSelectedDocumentForAnalysis(updated[0] || null);
+      return updated;
+    });
   };
 
   const handleFileDrop = (e) => {
@@ -243,8 +319,13 @@ export default function DocumentChat() {
 
 
   const handleAnalyzeClick = () => {
-    if (selectedDocumentForAnalysis && questionInput.trim()) {
-      handleDocumentAnalysis(selectedDocumentForAnalysis, [questionInput.trim()]);
+    const question = questionInput.trim();
+    if (!question) return;
+    if (selectedDocs.length === 1) {
+      handleDocumentAnalysis(selectedDocs[0], [question]);
+      setQuestionInput("");
+    } else if (selectedDocs.length > 1) {
+      handleMultiDocumentAnalysis(selectedDocs, question);
       setQuestionInput("");
     }
   };
@@ -255,11 +336,12 @@ export default function DocumentChat() {
   };
 
   const handleLoadHistory = async () => {
-    if (!selectedDocumentForAnalysis) return;
+    if (!selectedDocumentForAnalysis && selectedDocs.length !== 1) return;
     
     try {
       setLoading(true);
-      const url = documents_history.replace('{document_id}', selectedDocumentForAnalysis);
+      const activeDocId = selectedDocumentForAnalysis || selectedDocs[0];
+      const url = documents_history.replace('{document_id}', activeDocId);
       const response = await authFetch(url, {
         method: 'GET',
         headers: {
@@ -270,7 +352,8 @@ export default function DocumentChat() {
       if (response.ok) {
         const data = await response.json();
         // Format the document history in a structured way
-        const docName = getDocName(documents.find(doc => getDocId(doc) === selectedDocumentForAnalysis));
+        const activeDocId2 = activeDocId;
+        const docName = getDocName(documents.find(doc => getDocId(doc) === activeDocId2));
         const formattedContent = `# Document History: ${docName}
 
 **Document Information:**
@@ -310,7 +393,7 @@ ${data.sample_content || 'No content available'}`;
   };
 
   const handleDeleteDocument = async () => {
-    if (!selectedDocumentForAnalysis) return;
+    if (!selectedDocumentForAnalysis && selectedDocs.length !== 1) return;
     
     if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
       return;
@@ -318,7 +401,8 @@ ${data.sample_content || 'No content available'}`;
     
     try {
       setLoading(true);
-      const url = documents_history.replace('{document_id}', selectedDocumentForAnalysis);
+      const activeDocId = selectedDocumentForAnalysis || selectedDocs[0];
+      const url = documents_history.replace('{document_id}', activeDocId);
       const response = await authFetch(url, {
         method: 'DELETE',
         headers: {
@@ -451,7 +535,7 @@ ${data.sample_content || 'No content available'}`;
             </button>
           </div>
           {/* Action Buttons - Show when document is selected */}
-          {selectedDocumentForAnalysis && (
+          {selectedDocs.length > 0 && (
             <div className="flex gap-2 mb-3">
               <button
                 onClick={handleLoadHistory}
@@ -489,20 +573,23 @@ ${data.sample_content || 'No content available'}`;
               <div className="text-gray-400 text-sm text-center mt-8">No documents found.</div>
             ) : (
               <ul className="space-y-2">
-                {filteredDocs.map((doc) => (
-                  <li key={getDocId(doc)} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="document-selection"
-                      checked={selectedDocumentForAnalysis === getDocId(doc)}
-                      onChange={() => handleDocSelect(doc)}
-                      className="accent-blue-600"
-                    />
-                    <span className="truncate text-gray-700 text-sm">
-                      {getDocName(doc)}
-                    </span>
-                  </li>
-                ))}
+                {filteredDocs.map((doc) => {
+                  const id = getDocId(doc);
+                  const checked = selectedDocs.includes(id);
+                  return (
+                    <li key={id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleDocSelect(doc)}
+                        className="accent-blue-600"
+                      />
+                      <span className="truncate text-gray-700 text-sm">
+                        {getDocName(doc)}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -535,7 +622,7 @@ ${data.sample_content || 'No content available'}`;
               <div className="flex items-center justify-center h-full text-gray-400">
                 <div className="text-center">
                   <FiSearch className="text-4xl mb-2 mx-auto" />
-                  <p>Select a document and ask questions to analyze it</p>
+                  <p>Select one or multiple documents and ask a question</p>
                 </div>
               </div>
             ) : (
@@ -569,18 +656,65 @@ ${data.sample_content || 'No content available'}`;
           </div>
           {/* Input Area */}
           <div className="bg-white rounded-2xl shadow-md p-4 mt-4 flex-shrink-0">
+            {/* Analysis Type Selector */}
+            <div className="mb-3 flex flex-wrap gap-2">
+              {[
+                { key: 'qa', label: 'Q&A' },
+                { key: 'summary', label: 'Summary' },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setAnalysisType(opt.key)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    analysisType === opt.key
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {/* Selected Documents Chips */}
+            {selectedDocs.length > 0 && (
+              <div className="mb-3">
+                <div className="text-xs text-gray-500 mb-1">Selected documents:</div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedDocs.map((id) => {
+                    const docObj = documents.find((d) => getDocId(d) === id);
+                    const name = getDocName(docObj);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 rounded-full px-3 py-1 text-xs">
+                        {name}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
               <input
                 type="text"
-                placeholder="Ask a question about the document..."
+                placeholder={
+                  analysisType === 'qa'
+                    ? 'Ask a question about the document(s)...'
+                    : analysisType === 'summary'
+                    ? 'Describe what to summarize (optional)...'
+                    : analysisType === 'compare'
+                    ? 'What would you like to compare?'
+                    : analysisType === 'action_items'
+                    ? 'Add any instructions for action items (optional)...'
+                    : 'Add any instructions for entity extraction (optional)...'
+                }
                 value={questionInput}
                 onChange={(e) => setQuestionInput(e.target.value)}
-                disabled={!selectedDocumentForAnalysis || loading}
+                disabled={selectedDocs.length === 0 || loading}
                 className="flex-1 px-4 py-2 rounded-lg border text-black border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm mb-2 md:mb-0 disabled:opacity-50"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (!loading && selectedDocumentForAnalysis && questionInput.trim()) {
+                    if (!loading && selectedDocs.length > 0 && questionInput.trim()) {
                       handleAnalyzeClick();
                     }
                   }
@@ -589,7 +723,7 @@ ${data.sample_content || 'No content available'}`;
               <button
                 type="button"
                 onClick={handleAnalyzeClick}
-                disabled={!selectedDocumentForAnalysis || loading || !questionInput.trim()}
+                disabled={selectedDocs.length === 0 || loading || !questionInput.trim()}
                 className="flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2 transition-colors md:ml-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -600,17 +734,17 @@ ${data.sample_content || 'No content available'}`;
                 Analyze
               </button>
             </div>
-            {!selectedDocumentForAnalysis && (
-              <p className="text-sm text-gray-500 mt-2">Please select a document to start analyzing</p>
+            {selectedDocs.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">Select at least one document to start</p>
             )}
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-2 mt-3">
-              {quickActions.map((action) => (
+              {(DEFAULT_QUICK_ACTIONS[analysisType] || DEFAULT_QUICK_ACTIONS.qa).map((action) => (
                 <button
                   key={action}
                   type="button"
                   onClick={() => handleQuickAction(action)}
-                  disabled={!selectedDocumentForAnalysis || loading}
+                  disabled={selectedDocs.length === 0 || loading}
                   className="bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full px-4 py-1 text-xs font-medium border border-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {action}

@@ -55,5 +55,5 @@ export const list_documents = API_BASE_URL + "/v1/documents";
 export const documents_history = API_BASE_URL + "/v1/documents/{document_id}";
 
 
-
+export const multidocument_analysis = API_BASE_URL + "/v1/documents/query-multiple";
 

@@ -68,6 +68,19 @@ export default function SkillAnalysisPage() {
   const [uploadedCVNames, setUploadedCVNames] = useState([]);
   const [uploadedCVs, setUploadedCVs] = useState([]); // {id, name}
 
+  // --- Toast Notifications -------------------------------------------------
+  const [toasts, setToasts] = useState([]); // {id, type: 'success'|'error'|'info', message}
+  const notify = (message, type = "info", duration = 3500) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, type, message }]);
+    if (duration > 0) {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, duration);
+    }
+  };
+  const removeToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
   const jdUploadDisabled = Boolean(uploadedJDTitle || selectedJD);
 
   // --- Helpers --------------------------------------------------------------
@@ -214,7 +227,7 @@ export default function SkillAnalysisPage() {
       link.click();
       link.remove();
     } catch (err) {
-      alert("Failed to download CV");
+      notify("Failed to download CV", "error");
     }
   };
 
@@ -315,9 +328,9 @@ export default function SkillAnalysisPage() {
       fetch(jds, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } })
         .then((res) => res.json())
         .then((data) => setJdList(Array.isArray(data) ? data : data.results || []));
-      alert("JD uploaded successfully!");
+      notify("JD uploaded successfully!", "success");
     } catch (err) {
-      alert("Failed to upload JD");
+      notify("Failed to upload JD", "error");
     } finally {
       setUploadingJD(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -359,9 +372,9 @@ export default function SkillAnalysisPage() {
       fetch(cvs, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } })
         .then((res) => res.json())
         .then((data) => setCvList(Array.isArray(data) ? data : data.results || []));
-      alert("CV uploaded successfully!");
+      notify("CV uploaded successfully!", "success");
     } catch (err) {
-      alert("Failed to upload CV");
+      notify("Failed to upload CV", "error");
     } finally {
       setUploadingCV(false);
       if (cvFileInputRef.current) cvFileInputRef.current.value = "";
@@ -427,9 +440,9 @@ export default function SkillAnalysisPage() {
         .then((res) => res.json())
         .then((data) => setJdList(Array.isArray(data) ? data : data.results || []));
       setWriteJDText("");
-      alert("JD saved successfully!");
+      notify("JD saved successfully!", "success");
     } catch (err) {
-      alert("Failed to save JD");
+      notify("Failed to save JD", "error");
     } finally {
       setWritingJD(false);
     }
@@ -454,6 +467,26 @@ export default function SkillAnalysisPage() {
 
   return (
     <div className="bg-[#f5f7fb] min-h-screen h-screen flex overflow-hidden">
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`min-w-[260px] max-w-[360px] text-sm rounded-md shadow-lg px-4 py-3 text-white flex items-start gap-3 ${
+              t.type === 'success' ? 'bg-green-600' : t.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+            }`}
+          >
+            <div className="flex-1 break-words">{t.message}</div>
+            <button
+              type="button"
+              className="text-white/90 hover:text-white ml-2"
+              onClick={() => removeToast(t.id)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
       {/* Sidebar */}
       <aside className="w-[360px] bg-white shadow-xl flex flex-col h-full sticky top-0 p-6 border-r border-gray-200 overflow-y-auto max-h-screen">
         {/* Top Buttons */}
@@ -554,14 +587,13 @@ export default function SkillAnalysisPage() {
                 <input
                   type="file"
                   ref={fileInputRef}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  style={{ width: "100%", height: "100%" }}
+                  className="hidden"
                   onChange={handleFileInputChange}
                   disabled={uploadingJD || jdUploadDisabled}
                 />
-                {uploadingJD && <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold">Uploading...</div>}
+                {uploadingJD && <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold" onClick={(e) => e.stopPropagation()}>Uploading...</div>}
                 {jdUploadDisabled && !uploadingJD && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-gray-600 font-semibold">JD Selected</div>
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-gray-600 font-semibold" onClick={(e) => e.stopPropagation()}>JD Selected</div>
                 )}
               </div>
             )}
@@ -671,13 +703,12 @@ export default function SkillAnalysisPage() {
                     <input
                       type="file"
                       ref={cvFileInputRef}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      style={{ width: "100%", height: "100%" }}
+                      className="hidden"
                       onChange={handleCVFileInputChange}
                       disabled={uploadingCV}
                     />
                     {uploadingCV && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold">
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold" onClick={(e) => e.stopPropagation()}>
                         Uploading...
                       </div>
                     )}
@@ -714,13 +745,12 @@ export default function SkillAnalysisPage() {
                 <input
                   type="file"
                   ref={cvFileInputRef}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  style={{ width: "100%", height: "100%" }}
+                  className="hidden"
                   onChange={handleCVFileInputChange}
                   disabled={uploadingCV}
                 />
                 {uploadingCV && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold">
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-blue-600 font-semibold" onClick={(e) => e.stopPropagation()}>
                     Uploading...
                   </div>
                 )}
@@ -1027,8 +1057,6 @@ export default function SkillAnalysisPage() {
                       <span>Chat</span>
                     </button>
                   </div>
-
-                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md py-2 mt-2">Download ATS Resume</button>
                 </div>
               ))
             ) : (
@@ -1059,7 +1087,7 @@ export default function SkillAnalysisPage() {
       </main>
 
       {mailModalOpen && (
-        <MailModal candidate={mailModalCandidate} onClose={closeMailModal} />
+        <MailModal candidate={mailModalCandidate} onClose={closeMailModal} notify={notify} />
       )}
 
       {chatModalOpen && (
@@ -1067,6 +1095,7 @@ export default function SkillAnalysisPage() {
           candidate={chatModalCandidate} 
           jdId={selectedJD}
           onClose={closeChatModal} 
+          notify={notify}
         />
       )}
 
@@ -1243,7 +1272,7 @@ function ReasoningText({ text }) {
   );
 }
 
-function MailModal({ candidate, onClose }) {
+function MailModal({ candidate, onClose, notify }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -1325,9 +1354,10 @@ function MailModal({ candidate, onClose }) {
       });
       if (!res.ok) throw new Error("Failed to send email");
       onClose();
-      alert("Email sent successfully!");
+      notify && notify("Email sent successfully!", "success");
     } catch (err) {
       setError("Failed to send email");
+      notify && notify("Failed to send email", "error");
     } finally {
       setSending(false);
     }
@@ -1399,7 +1429,7 @@ function MailModal({ candidate, onClose }) {
   );
 }
 
-function ChatModal({ candidate, jdId, onClose }) {
+function ChatModal({ candidate, jdId, onClose, notify }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -1430,7 +1460,10 @@ function ChatModal({ candidate, jdId, onClose }) {
           setConversationId(data.conversationId);
         }
       })
-      .catch(() => setError("Failed to load chat history"))
+      .catch(() => {
+        setError("Failed to load chat history");
+        notify && notify("Failed to load chat history", "error");
+      })
       .finally(() => setLoading(false));
   }, [candidate, jdId]);
 
@@ -1489,8 +1522,10 @@ function ChatModal({ candidate, jdId, onClose }) {
       }
       
       setNewMessage("");
+      notify && notify("Message sent", "success", 2000);
     } catch (err) {
       setError("Failed to send message");
+      notify && notify("Failed to send message", "error");
     } finally {
       setSending(false);
     }

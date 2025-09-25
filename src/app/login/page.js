@@ -85,7 +85,7 @@ export default function LoginPage() {
       <div className="flex flex-col md:flex-row items-center justify-center w-full max-w-5xl mx-auto p-4">
         {/* Robot Image */}
         <div className="flex-1 flex items-center justify-center mb-8 md:mb-0">
-          <Image
+          <img
             src="/login_robo.png"
             alt="Login Robot"
             width={350}
